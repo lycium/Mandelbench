@@ -25,20 +25,17 @@
 
 using u8 = unsigned char;
 using rgba8u = vec<4, u8>;
-
-using vec4f = vec<4, float>;
+using vec4f  = vec<4, float>;
 
 
 constexpr int xres = 720;//480;//128 * 4;
 constexpr int yres = 720;//480;//128 * 4;
 constexpr int num_frames  = 30 * 12;
 constexpr int noise_size  = 1 << 8;
-constexpr int num_samples = 6;
+constexpr int num_samples = 6 * 6 * 6;
 constexpr double inv_num_samples = 1.0 / num_samples;
 
-
-const bool save_gif = false;
-const bool ramdrive = true;
+const bool ramdrive = false;
 const char * dir_prefix = (ramdrive ? "r:" : ".");
 
 
@@ -189,11 +186,10 @@ int main(int argc, char ** argv)
 	SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
 #endif
 #if _DEBUG
-	const int num_threads = std::thread::hardware_concurrency();
+	const int num_threads = 1;
 #else
 	const int num_threads = std::thread::hardware_concurrency();
 #endif
-
 	printf("Rendering %d frames at res %d x %d with %d samples per pixel\n", num_frames, xres, yres, num_samples);
 
 	std::vector<rgba8u> image(xres * yres);
@@ -226,18 +222,17 @@ int main(int argc, char ** argv)
 		const auto t_start = std::chrono::system_clock::now();
 
 		std::atomic<int> counter = 0;
-
 		for (int z = 0; z < num_threads; ++z) render_threads[z] = std::thread(RenderThreadFunc, f, &samples[0], &noise[0], &counter, &image[0]);
 		for (int z = 0; z < num_threads; ++z) render_threads[z].join();
 
 		const auto t_end = std::chrono::system_clock::now();
 		const std::chrono::duration<double> elapsed_time = t_end - t_start;
 		const double elapsed_seconds = elapsed_time.count();
-		//printf("took %.2f seconds\n", elapsed_seconds);
 
 		stbi_write_png(filename, xres, yres, 4, &image[0], xres * 4);
 
 		printf("%d ", f);
+		printf("took %.2f seconds\n", elapsed_seconds);
 	}
 	printf("\n");
 
