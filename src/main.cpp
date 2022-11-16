@@ -157,9 +157,9 @@ void RenderThreadFunc(
 			vec4f sum = 0;
 			for (int s = 0; s < num_samples; s++)
 			{
-				double i = s * inv_num_samples; i += noise[(y % noise_size) + (x % noise_size)] * (1.0 / 65536); i = (i < 1) ? i : i - 1;
-				double j = samples[s].x();      j += noise[(y % noise_size) + (x % noise_size)] * (1.0 / 65536); j = (j < 1) ? j : j - 1;
-				double k = samples[s].y();      k += noise[(y % noise_size) + (x % noise_size)] * (1.0 / 65536); k = (k < 1) ? k : k - 1;
+				double i = s * inv_num_samples; i += noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536); i = (i < 1) ? i : i - 1;
+				double j = samples[s].x();      j += noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536); j = (j < 1) ? j : j - 1;
+				double k = samples[s].y();      k += noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536); k = (k < 1) ? k : k - 1;
 
 				sum += ImageFunction(
 					f + 0.5 + triDist(i),
