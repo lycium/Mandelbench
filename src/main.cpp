@@ -23,13 +23,14 @@ using u8 = unsigned char;
 using rgba8u = vec<4, u8>;
 using vec4f  = vec<4, float>;
 
-constexpr int xres = 720;//480;//128 * 4;
-constexpr int yres = 720;//480;//128 * 4;
+constexpr int xres = 720;
+constexpr int yres = 720;
 constexpr int num_frames  = 30 * 12;
 constexpr int noise_size  = 1 << 8;
-constexpr int num_samples = 6 * 6;
+constexpr int num_samples = 6 * 6 * 6;
 constexpr double inv_num_samples = 1.0 / num_samples;
 
+const bool save_frames = true;
 const bool ramdrive = false;
 const char * dir_prefix = (ramdrive ? "r:" : ".");
 
@@ -42,23 +43,35 @@ inline vec4f ImageFunction(double frame, double x, double y, int num_frames, int
 	constexpr int num_iters = 4096;
 
 	const double time  = LinearMapping(0, num_frames, 0.0, 3.141592653589793238 * 2, frame);
-	const double time2 = cos(3.141592653589793238 - time) * 0.5 + 0.5;
-	const double scale = exp(time2 * -12.0);
+	const double time2 = std::cos(3.141592653589793238 - time) * 0.5 + 0.5;
+	const double scale = std::exp(time2 * -12.0);
 	const vec2d centre = vec2d(-0.761574, -0.0847596);
 	const vec2d z0 = vec2d(
 		LinearMapping(0, xres, -scale, scale, x),
 		LinearMapping(0, yres, scale, -scale, y)) + centre;
 
-	vec2d z = z0;
-	int iteration = 0;
-	for (; iteration < num_iters && (dot(z, z) < 25 * 25); iteration++)
-		z = vec2d(z.x() * z.x() - z.y() * z.y(), 2 * z.x() * z.y()) + z0;
+	// Fast early out for main cardioid and period 2 bulb
+	// Ref: https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set#Cardioid_/_bulb_checking
+	const double q = (z0.x() - 0.25) * (z0.x() - 0.25) + z0.y() * z0.y();
+	const bool cardioid = (q * (q + (z0.x() - 0.25)) <= 0.25 * z0.y() * z0.y());
+	const bool bulb2 = ((z0.x() + 1) * (z0.x() + 1) + z0.y() * z0.y() < 0.0625);
 
-	const int blah = iteration == num_iters ? 0 : (z.y() > 0);
+	if (cardioid || bulb2)
+		return vec4f(0);
+	else
+	{
+		vec2d z = z0;
+		int iteration = 0;
+		for (; iteration < num_iters && (dot(z, z) < 25 * 25); iteration++)
+			z = vec2d(z.x() * z.x() - z.y() * z.y(), 2 * z.x() * z.y()) + z0;
 
-	const vec4f cheshire[2] = { vec4f(160, 100, 200, 1) / 256, vec4f(137, 25, 100) / 256 };
-	const vec4f col_out = cheshire[iteration % 2] * blah;
-	return col_out * col_out * 3.0f;
+		// Binary decomposition colouring, see https://mathr.co.uk/mandelbrot/book-draft/#binary-decomposition
+		const int binary = iteration == num_iters ? 0 : (z.y() > 0);
+
+		const vec4f colours[2] = { vec4f(160, 100, 200, 256) / 256, vec4f(137, 25, 100, 256) / 256 };
+		const vec4f col_out = colours[iteration % 2] * binary;
+		return col_out * col_out * 3.0f;
+	}
 }
 
 
@@ -92,18 +105,17 @@ constexpr inline double RadicalInverse(int i)
 }
 
 
-void hilbert(const vec2i dx, const vec2i dy, const int size_x, const int size_y, vec2i p, int size, std::vector<int> & ordering_out)
+void Hilbert(const vec2i dx, const vec2i dy, vec2i p, int size, std::vector<int> & ordering_out)
 {
 	if (size > 1)
 	{
 		size >>= 1;
-		hilbert( dy,  dx, size_x, size_y, p, size, ordering_out); p += dy * size;
-		hilbert( dx,  dy, size_x, size_y, p, size, ordering_out); p += dx * size;
-		hilbert( dx,  dy, size_x, size_y, p, size, ordering_out); p += dx * (size - 1) - dy;
-		hilbert(-dy, -dx, size_x, size_y, p, size, ordering_out);
+		Hilbert( dy,  dx, p, size, ordering_out); p += dy * size;
+		Hilbert( dx,  dy, p, size, ordering_out); p += dx * size;
+		Hilbert( dx,  dy, p, size, ordering_out); p += dx * (size - 1) - dy;
+		Hilbert(-dy, -dx, p, size, ordering_out);
 	}
-	else if (p.x() < size_x && p.y() < size_y)
-		ordering_out.push_back(p.y() * size_x + p.x());
+	else ordering_out.push_back(p.y() * noise_size + p.x());
 }
 
 
@@ -127,7 +139,7 @@ void RenderThreadFunc(
 		if (bucket_i >= num_buckets)
 			break;
 
-		// Get sub-pass and pixel ranges for current bucket
+		// Get pixel ranges for current bucket
 		const int bucket_y  = bucket_i / x_buckets;
 		const int bucket_x  = bucket_i - x_buckets * bucket_y;
 		const int bucket_x0 = bucket_x * bucket_size, bucket_x1 = std::min(bucket_x0 + bucket_size, xres);
@@ -187,8 +199,8 @@ int main(int argc, char ** argv)
 	{
 		std::vector<int> hilbert_vals;
 		hilbert_vals.reserve(noise_size * noise_size);
-		hilbert(vec2i(1, 0), vec2i(0, 1), noise_size, noise_size, 0, noise_size, hilbert_vals);
-	
+		Hilbert(vec2i(1, 0), vec2i(0, 1), 0, noise_size, hilbert_vals);
+
 		uint64_t v = 0;
 		for (int i = 0; i < noise_size * noise_size; ++i)
 		{
@@ -199,25 +211,28 @@ int main(int argc, char ** argv)
 
 	std::vector<std::thread> render_threads(num_threads);
 
+	const auto bench_start = std::chrono::system_clock::now();
+
 	for (int f = 0; f < num_frames; ++f)
 	{
 		const auto t_start = std::chrono::system_clock::now();
-
-		std::atomic<int> counter = 0;
-		for (int z = 0; z < num_threads; ++z) render_threads[z] = std::thread(RenderThreadFunc, f, &samples[0], &noise[0], &counter, &image[0]);
-		for (int z = 0; z < num_threads; ++z) render_threads[z].join();
-
-		const auto t_end = std::chrono::system_clock::now();
-		const std::chrono::duration<double> elapsed_time = t_end - t_start;
-		const double elapsed_seconds = elapsed_time.count();
+		{
+			std::atomic<int> counter = { 0 };
+			for (int z = 0; z < num_threads; ++z) render_threads[z] = std::thread(RenderThreadFunc, f, &samples[0], &noise[0], &counter, &image[0]);
+			for (int z = 0; z < num_threads; ++z) render_threads[z].join();
+		}
+		const std::chrono::duration<double> elapsed_time = std::chrono::system_clock::now() - t_start;
 
 		char filename[256];
 		sprintf(filename, "%s/frames/frame%04d.png", dir_prefix, f);
-		stbi_write_png(filename, xres, yres, 4, &image[0], xres * 4);
+		if (save_frames) stbi_write_png(filename, xres, yres, 4, &image[0], xres * 4);
 
-		printf("Frame %d took %.2f seconds\n", f, elapsed_seconds);
+		printf("Frame %d took %.2f seconds\n", f, elapsed_time.count());
 	}
 	printf("\n");
+
+	const std::chrono::duration<double> elapsed_time = std::chrono::system_clock::now() - bench_start;
+	printf("Rendering animation took %.2f seconds\n", elapsed_time.count());
 
 	return 0;
 }
