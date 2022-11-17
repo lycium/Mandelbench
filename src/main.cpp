@@ -142,8 +142,8 @@ void RenderThreadFunc(
 			vec4f sum = 0;
 			for (int s = 0; s < num_samples; ++s)
 			{
-                double n = noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536);
-                double i = s * inv_num_samples + n; i = (i < 1) ? i : i - 1;
+				double n = noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536);
+				double i = s * inv_num_samples + n; i = (i < 1) ? i : i - 1;
 				double j = samples[s].x()      + n; j = (j < 1) ? j : j - 1;
 				double k = samples[s].y()      + n; k = (k < 1) ? k : k - 1;
 
@@ -177,7 +177,6 @@ int main(int argc, char ** argv)
 #else
 	const int num_threads = std::thread::hardware_concurrency();
 #endif
-
 	printf("Rendering %d frames at res %d x %d with %d samples per pixel\n", num_frames, xres, yres, num_samples);
 
 	std::vector<rgba8u> image(xres * yres);
@@ -219,7 +218,7 @@ int main(int argc, char ** argv)
 
 		stbi_write_png(filename, xres, yres, 4, &image[0], xres * 4);
 
-        printf("Frame %d took %.2f seconds\n", f, elapsed_seconds);
+		printf("Frame %d took %.2f seconds\n", f, elapsed_seconds);
 	}
 	printf("\n");
 
