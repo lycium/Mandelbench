@@ -204,7 +204,7 @@ int main(int argc, char ** argv)
 	for (int f = 0; f < num_frames; ++f)
 	{
 		char filename[256];
-		sprintf(filename, "%s/frames/frame%02d.png", dir_prefix, f);
+		sprintf(filename, "%s/frames/frame%04d.png", dir_prefix, f);
 
 		const auto t_start = std::chrono::system_clock::now();
 
