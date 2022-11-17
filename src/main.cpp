@@ -5,9 +5,6 @@
 #include <Windows.h>
 #endif
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "util/stb_image.h"
-
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "util/stb_image_write.h"
 
@@ -30,7 +27,7 @@ constexpr int xres = 720;//480;//128 * 4;
 constexpr int yres = 720;//480;//128 * 4;
 constexpr int num_frames  = 30 * 12;
 constexpr int noise_size  = 1 << 8;
-constexpr int num_samples = 6  * 6;
+constexpr int num_samples = 6 * 6;
 constexpr double inv_num_samples = 1.0 / num_samples;
 
 const bool ramdrive = false;
@@ -139,10 +136,11 @@ void RenderThreadFunc(
 		for (int y = bucket_y0; y < bucket_y1; ++y)
 		for (int x = bucket_x0; x < bucket_x1; ++x)
 		{
+			const double n = noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536);
+
 			vec4f sum = 0;
 			for (int s = 0; s < num_samples; ++s)
 			{
-				double n = noise[(y % noise_size) * noise_size + (x % noise_size)] * (1.0 / 65536);
 				double i = s * inv_num_samples + n; i = (i < 1) ? i : i - 1;
 				double j = samples[s].x()      + n; j = (j < 1) ? j : j - 1;
 				double k = samples[s].y()      + n; k = (k < 1) ? k : k - 1;
@@ -173,7 +171,7 @@ int main(int argc, char ** argv)
 	SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
 #endif
 #if _DEBUG
-	const int num_threads = std::thread::hardware_concurrency();
+	const int num_threads = 1;
 #else
 	const int num_threads = std::thread::hardware_concurrency();
 #endif
@@ -203,9 +201,6 @@ int main(int argc, char ** argv)
 
 	for (int f = 0; f < num_frames; ++f)
 	{
-		char filename[256];
-		sprintf(filename, "%s/frames/frame%04d.png", dir_prefix, f);
-
 		const auto t_start = std::chrono::system_clock::now();
 
 		std::atomic<int> counter = 0;
@@ -216,6 +211,8 @@ int main(int argc, char ** argv)
 		const std::chrono::duration<double> elapsed_time = t_end - t_start;
 		const double elapsed_seconds = elapsed_time.count();
 
+		char filename[256];
+		sprintf(filename, "%s/frames/frame%04d.png", dir_prefix, f);
 		stbi_write_png(filename, xres, yres, 4, &image[0], xres * 4);
 
 		printf("Frame %d took %.2f seconds\n", f, elapsed_seconds);
