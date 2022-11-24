@@ -19,26 +19,36 @@
 #include <stdio.h>
 
 
-using u8 = unsigned char;
-using rgb8u = vec<3, u8>;
-using vec4f = vec<4, float>;
+enum RenderQuality
+{
+	TEST   = 6,
+	LOW    = 6*6,
+	MEDIUM = 6*6*6,
+	FINAL  = 6*6*6*6
+};
 
 constexpr int res_multi = 8;
-constexpr int res_div   = 4;
+constexpr int res_div   = 3;
 constexpr int xres = res_multi * 480 / res_div;
 constexpr int yres = res_multi * 270 / res_div;
 constexpr int num_frames  = 30 * 12 * 1;
 constexpr int noise_size  = 1 << 8;
-constexpr int num_samples = 6*6*6; // 6*6*6*6;
+constexpr int num_samples = RenderQuality::MEDIUM;
 constexpr double inv_samples = 1.0 / num_samples;
 constexpr double aspect = (double)yres / (double)xres;
 
 const bool save_frames = true;
-const bool ramdrive = true;
+const bool ramdrive = false;
 const char * dir_prefix = (ramdrive ? "r:" : ".");
 
 
+using u8 = unsigned char;
+using rgb8u = vec<3, u8>;
+using vec4f = vec<4, float>;
 
+
+
+ // Excessively verbose function of didactic origin :)
 inline double LinearMapping(double a, double b, double c, double d, double x) { return (x - a) / (b - a) * (d - c) + c; }
 
 inline vec4f ImageFunction(double x, double y, double frame, int xres, int yres, int num_frames)
@@ -73,9 +83,9 @@ inline vec4f ImageFunction(double x, double y, double frame, int xres, int yres,
 		// Binary decomposition colouring, see https://mathr.co.uk/mandelbrot/book-draft/#binary-decomposition
 		const int binary = iteration == num_iters ? 0 : (z.y() > 0);
 
-		const double dwell = iteration + 1 - std::log2(0.5 * std::log(dot(z, z)));
-		float dwell_loop = (float)std::cos(dwell * 3.141592653589793238 * 2 * 0.125f) * 0.5f + 0.5f;
-		dwell_loop = std::isnormal(dwell_loop) ? dwell_loop : 0;
+		const double log_r2 = std::log(dot(z, z));
+		const double dwell = (log_r2 <= 0) ? 0 : num_iters - iteration + std::log2(log_r2);
+		const float  dwell_loop = std::sin((float)dwell * 3.141592653589793238f * 2 * 0.125f) * 0.5f + 0.5f;
 
 		const vec4f colours[2] = { vec4f(220, 80, 40, 256) / 256, vec4f(80, 50, 220, 256) / 256 };
 		const vec4f col_out = colours[iteration % 2];
@@ -136,11 +146,12 @@ void RenderThreadFunc(
 	rgb8u * const image_out)
 {
 	// Get rounded up number of buckets in x and y
-	constexpr int bucket_size = 4;
-	constexpr int x_buckets = (xres + bucket_size - 1) / bucket_size;
-	constexpr int y_buckets = (yres + bucket_size - 1) / bucket_size;
-	constexpr int loop_frames = num_frames / 2 + 1;
-	constexpr int num_buckets = x_buckets * y_buckets;
+	constexpr int
+		bucket_size = 4,
+		x_buckets = (xres + bucket_size - 1) / bucket_size,
+		y_buckets = (yres + bucket_size - 1) / bucket_size,
+		loop_frames = num_frames / 2 + 1,
+		num_buckets = x_buckets * y_buckets;
 
 	while (true)
 	{
@@ -164,6 +175,7 @@ void RenderThreadFunc(
 			vec4f sum = 0;
 			for (int s = 0; s < num_samples; ++s)
 			{
+				// Randomise Hammserley sequence using per-pixel approximate blue noise
 				double i = s * inv_samples + n; i = (i < 1) ? i : i - 1;
 				double j = samples[s].x()  + n; j = (j < 1) ? j : j - 1;
 				double k = samples[s].y()  + n; k = (k < 1) ? k : k - 1;
@@ -176,6 +188,7 @@ void RenderThreadFunc(
 			}
 			sum *= inv_samples;
 
+			// Sqrt for approximate linear->sRGB conversion
 			image_out[pix_y * xres + pix_x] =
 			{
 				std::max(0, std::min(255, (int)(std::sqrt(sum.x()) * 256))),
@@ -228,8 +241,7 @@ int main(int argc, char ** argv)
 	const auto bench_start = std::chrono::system_clock::now();
 	double total_render_time = 0;
 
-	//for (int frame = 0; frame < num_frames; ++frame)
-	for (int frame = 0; frame <= num_frames / 2; ++frame)
+	for (int frame = 0; frame < num_frames / 2 + 1; ++frame)
 	{
 		const auto t_start = std::chrono::system_clock::now();
 		{
@@ -254,8 +266,20 @@ int main(int argc, char ** argv)
 	const std::chrono::duration<double> elapsed_time = std::chrono::system_clock::now() - bench_start;
 	printf("Rendering animation took %.2f seconds (%.2f including saving)\n", total_render_time, elapsed_time.count());
 
-	FILE * stats_f = fopen("benchmark_stats.txt", "w"); fprintf(stats_f, "%f\n%f\n", total_render_time, elapsed_time.count());
+	FILE * stats_f = fopen("benchmark_stats.txt", "w");
+	fprintf(stats_f, "%f\n%f\n", total_render_time, elapsed_time.count());
 	fclose(stats_f);
+
+	for (int dst_frame = num_frames / 2 + 1; dst_frame < num_frames; ++dst_frame)
+	{
+		const int src_frame = num_frames - dst_frame;
+		char cmd_str[512];
+
+#if _WIN32
+		sprintf(cmd_str, "copy \"%s\\frames\\frame%04d.png\" \"%s\\frames\\frame%04d.png\" /Y", dir_prefix, src_frame, dir_prefix, dst_frame);
+		system(cmd_str);
+#endif
+	}
 
 	return 0;
 }
