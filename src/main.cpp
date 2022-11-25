@@ -16,6 +16,24 @@
 #include <thread>
 #include <atomic>
 
+#ifndef HAVE_FILESYSTEM
+	#if __cplusplus >= 202002L
+		#include <version>
+		#if __cpp_lib_filesystem >= 201703L
+			#define HAVE_FILESYSTEM 1
+		#else
+			#define HAVE_FILESYSTEM 0
+		#endif
+	#elif __cplusplus >= 201703L
+		#define HAVE_FILESYSTEM 1
+	#else
+		#define HAVE_FILESYSTEM 0
+	#endif
+#endif
+#if HAVE_FILESYSTEM
+	#include <filesystem>
+#endif
+
 #include <stdio.h>
 
 
@@ -40,6 +58,7 @@ constexpr double aspect = (double)yres / (double)xres;
 const bool save_frames = true;
 const bool ramdrive = false;
 const char * dir_prefix = (ramdrive ? "r:" : ".");
+const char * png_format = "%s/frames/frame%04d.png";
 
 
 using u8 = unsigned char;
@@ -254,7 +273,7 @@ int main(int argc, char ** argv)
 		total_render_time += elapsed_time.count();
 
 		char filename[256];
-		sprintf(filename, "%s/frames/frame%04d.png", dir_prefix, frame);
+		sprintf(filename, png_format, dir_prefix, frame);
 		if (save_frames) stbi_write_png(filename, xres, yres, 3, &image[0], xres * 3);
 
 		fprintf(frame_times_file, "%d, %f\n", frame, elapsed_time.count());
@@ -273,9 +292,15 @@ int main(int argc, char ** argv)
 	for (int dst_frame = num_frames / 2 + 1; dst_frame < num_frames; ++dst_frame)
 	{
 		const int src_frame = num_frames - dst_frame;
-		char cmd_str[512];
 
-#if _WIN32
+#if HAVE_FILESYSTEM
+		std::error_code ec;
+		char from[256], to[256];
+		sprintf(from, png_format, dir_prefix, src_frame);
+		sprintf(to  , png_format, dir_prefix, dst_frame);
+		std::filesystem::copy_file(from, to, std::filesystem::copy_options::update_existing, ec);
+#elif _WIN32
+		char cmd_str[512];
 		sprintf(cmd_str, "copy \"%s\\frames\\frame%04d.png\" \"%s\\frames\\frame%04d.png\" /Y", dir_prefix, src_frame, dir_prefix, dst_frame);
 		system(cmd_str);
 #endif
