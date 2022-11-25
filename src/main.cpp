@@ -80,11 +80,14 @@ inline vec4f ImageFunction(double x, double y, double frame, int xres, int yres,
 		for (; iteration < num_iters && (dot(z, z) < R * R); iteration++)
 			z = vec2d(z.x() * z.x() - z.y() * z.y(), 2 * z.x() * z.y()) + z0;
 
+		if (iteration == num_iters)
+			return vec4f(0);
+
 		// Binary decomposition colouring, see https://mathr.co.uk/mandelbrot/book-draft/#binary-decomposition
-		const int binary = iteration == num_iters ? 0 : (z.y() > 0);
+		const int binary = (z.y() > 0);
 
 		const double log_r2 = std::log(dot(z, z));
-		const double dwell = (log_r2 <= 0) ? 0 : num_iters - iteration + std::log2(log_r2);
+		const double dwell = num_iters - iteration + std::log2(log_r2);
 		const float  dwell_loop = std::sin((float)dwell * 3.141592653589793238f * 2 * 0.125f) * 0.5f + 0.5f;
 
 		const vec4f colours[2] = { vec4f(220, 80, 40, 256) / 256, vec4f(80, 50, 220, 256) / 256 };
