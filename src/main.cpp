@@ -183,11 +183,11 @@ void RenderThreadFunc(
 				double j = samples[s].x()  + n; j = (j < 1) ? j : j - 1;
 				double k = samples[s].y()  + n; k = (k < 1) ? k : k - 1;
 
-				sum += ImageFunction(
+				sum += max(0.f, ImageFunction(
 					pix_x + 0.5 + triDist(i),
 					pix_y + 0.5 + triDist(j),
 					frame + 0.5 + triDist(k),
-					xres, yres, num_frames);
+					xres, yres, num_frames));
 			}
 			sum *= inv_samples;
 
