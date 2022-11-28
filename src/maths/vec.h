@@ -96,6 +96,8 @@ inline vec<3, real_type> cross(const vec<3, real_type> & a, const vec<3, real_ty
 		a.x() * b.y() - a.y() * b.x());
 }
 
+template<int n, typename real_type>
+constexpr inline vec<n, real_type> max(const real_type lhs, const vec<n, real_type> & rhs) { vec<n, real_type> r; for (int i = 0; i < n; ++i) r.e[i] = std::max(lhs, rhs.e[i]); return r; }
 
 using vec2i = vec<2, int>;
 using vec2r = vec<2, real>;
